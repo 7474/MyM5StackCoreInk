@@ -1,8 +1,11 @@
+# MyM5StackCoreInk
 
+koudenpa's M5Stack CoreInk.
 
+## Install
 
-## memo
-
+Set environment variables.
 ```
 cp env.h.sample env.h
+# And edit it.
 ```
