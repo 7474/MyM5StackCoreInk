@@ -14,3 +14,8 @@ Set environment variables.
 cp env.h.sample env.h
 # And edit it.
 ```
+
+## Thanks
+
+- https://github.com/closedcube/ClosedCube_SHT31D_Arduino
+- https://github.com/adafruit/Adafruit_BMP280_Library

@@ -37,25 +37,34 @@ void flushTime() {
 }
 
 ClosedCube_SHT31D sht3xd;
+SHT31D sht3xResult;
+
 Adafruit_BMP280 bmp; // I2C
-// C
-float temperature;
-// Pa
-uint32_t pressure;
-// m
-float altitude;
+float temperature; // C
+uint32_t pressure; // Pa
+float altitude; // m
 
 void flushEnv() {
+  InkPageSprite.drawString(5, 30, "BMP280");
   sprintf(flushStrBuf, "%2.2fC %4.1fhPa %4.0fm",
           temperature, pressure / 100.0f, altitude);
-  InkPageSprite.drawString(5, 30, "BMP280");
   InkPageSprite.drawString(10, 45, flushStrBuf);
+
   InkPageSprite.drawString(5, 60, "SHT30");
-  InkPageSprite.drawString(10, 75, "TODO");
+  if (sht3xResult.error == SHT3XD_NO_ERROR) {
+    sprintf(flushStrBuf, "%2.2fC %2.1f%%",
+            sht3xResult.t, sht3xResult.rh);
+  } else {
+    sprintf(flushStrBuf, "[ERROR] Code #%d", sht3xResult.error);
+  }
+  InkPageSprite.drawString(10, 75, flushStrBuf);
+
   InkPageSprite.pushSprite();
 }
 
 void updateEnv() {
+  sht3xResult = sht3xd.periodicFetchData();
+
   temperature =  bmp.readTemperature();
   pressure = bmp.readPressure();
   // TODO get current seaLevelhPa
@@ -181,5 +190,5 @@ void loop() {
   flushTime();
   putLog("loop end.");
   //  scani2c();
-  delay(15000);
+  delay(60 * 1000);
 }
