@@ -7,6 +7,11 @@
 #include <WiFi.h>
 #include "env.h"
 
+#include "MackerelClient.h"
+MackerelHostMetric hostMetricsPool[10];
+MackerelServiceMetric serviceMetricsPool[10];
+MackerelClient mackerelClient(hostMetricsPool, 10, serviceMetricsPool, 10, mackerelApiKey);
+
 #define VARSION = "MyM5StackCoreInk 0.0.3"
 #define MY_SHT30_ADDRESS 0x44
 #define MY_BMP280_ADDRESS 0x76
@@ -43,6 +48,12 @@ Adafruit_BMP280 bmp; // I2C
 float temperature; // C
 uint32_t pressure; // Pa
 float altitude; // m
+// TODO get current seaLevelhPa
+// https://www.data.jma.go.jp/obd/stats/data/mdrr/synopday/data1s.html
+// 毎日の全国データ一覧表（日別値詳細版:2020年11月14日）
+// 地点 現地平均  海面平均  最低海面値 最低海面起時
+// 東京 1023.0  1026.0  1022.5  02:51
+float seaLevelhPa = 1026.0; // hPa
 
 void flushEnv() {
   InkPageSprite.drawString(5, 30, "BMP280");
@@ -67,8 +78,13 @@ void updateEnv() {
 
   temperature =  bmp.readTemperature();
   pressure = bmp.readPressure();
-  // TODO get current seaLevelhPa
-  altitude = bmp.readAltitude();
+  altitude = bmp.readAltitude(seaLevelhPa);
+}
+
+void sendEnvToMackerel() {
+  mackerelClient.addServiceMetric("sht30.t", sht3xResult.t);
+  mackerelClient.addServiceMetric("sht30.rh", sht3xResult.rh);
+  mackerelClient.postServiceMetrics("MyM5StackCoreInk");
 }
 
 void setupTime() {
@@ -144,51 +160,12 @@ void setup() {
   putLog("BMP280 initialized.");
 }
 
-void scani2c() {
-  byte error, address;
-  int nDevices;
-
-  Serial.println("Scanning...");
-
-  nDevices = 0;
-  for (address = 1; address < 127; address++ )
-  {
-    // The i2c_scanner uses the return value of
-    // the Write.endTransmisstion to see if
-    // a device did acknowledge to the address.
-    Wire.beginTransmission(address);
-    error = Wire.endTransmission();
-
-    if (error == 0)
-    {
-      Serial.print("I2C device found at address 0x");
-      if (address < 16)
-        Serial.print("0");
-      Serial.print(address, HEX);
-      Serial.println("  !");
-
-      nDevices++;
-    }
-    else if (error == 4)
-    {
-      Serial.print("Unknown error at address 0x");
-      if (address < 16)
-        Serial.print("0");
-      Serial.println(address, HEX);
-    }
-  }
-  if (nDevices == 0)
-    Serial.println("No I2C devices found\n");
-  else
-    Serial.println("done\n");
-}
-
 void loop() {
   putLog("loop start.");
   updateEnv();
   flushEnv();
   flushTime();
+  sendEnvToMackerel();
   putLog("loop end.");
-  //  scani2c();
   delay(60 * 1000);
 }
