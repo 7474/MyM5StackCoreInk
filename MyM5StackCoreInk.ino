@@ -1,4 +1,5 @@
 #include "M5CoreInk.h"
+#include "esp_adc_cal.h"
 
 #include <Wire.h>
 #include "Adafruit_BMP280.h"
@@ -29,6 +30,19 @@ void putLog(char* message) {
   //  InkPageSprite.drawString(10, 180, message);
   //  InkPageSprite.pushSprite();
   Serial.println(message);
+}
+
+// https://github.com/m5stack/M5-CoreInk/blob/0a9a38ea03d57b6e4240b0b26eaa8184786caf6f/examples/FactoryTest/FactoryTest.ino#L52-L62
+float getBatVoltage()
+{
+    analogSetPinAttenuation(35,ADC_11db);
+    esp_adc_cal_characteristics_t *adc_chars = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
+    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 3600, adc_chars);
+    uint16_t ADCValue = analogRead(35);
+    
+    uint32_t BatVolmV  = esp_adc_cal_raw_to_voltage(ADCValue,adc_chars);
+    float BatVol = float(BatVolmV) * 25.1 / 5.1 / 1000;
+    return BatVol;
 }
 
 void flushTime() {
@@ -84,12 +98,20 @@ void updateEnv() {
 }
 
 void sendEnvToMackerel() {
+  // Service Metrics
   mackerelClient.addServiceMetric("sht30.t", sht3xResult.t);
   mackerelClient.addServiceMetric("sht30.rh", sht3xResult.rh);
   mackerelClient.postServiceMetrics("MyM5StackCoreInk");
 
+  // Host Metrics
+  // M5Stack CoreInk
+  // XXX これもよそで更新しておいてここでは参照するだけがいいかも。
+  float batVoltage = getBatVoltage();
+  mackerelClient.addHostMetric("custom.battery.voltage.lipo390mah", batVoltage);
+  // SHT30
   mackerelClient.addHostMetric("custom.sht30.t", sht3xResult.t);
   mackerelClient.addHostMetric("custom.sht30.rh", sht3xResult.rh);
+  // BMP280
   // 自宅のRaspberry PiがBME280からの値を bme280.* で送っているのでそれに合わせている。
   // が、温度と気圧のセンサが同じものなのかは知らない。
   // https://github.com/7474/RealDiceBot/blob/master/IoTEdgeDevice/files/usr/local/bin/bme280/bme280.sh
@@ -112,6 +134,8 @@ void setupM5Ink() {
   {
     Serial.printf("Ink Sprite creat faild");
   }
+
+  putLog("M5Ink initialized.");
 }
 
 void setupWiFi() {
@@ -124,6 +148,8 @@ void setupWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
   }
+
+  putLog("Wi-Fi initialized.");
 }
 
 void setupTime() {
@@ -141,6 +167,8 @@ void setupTime() {
   RTCDate.Month = timeInfo.tm_mon + 1;
   RTCDate.Date = timeInfo.tm_mday;
   M5.rtc.SetData(&RTCDate);
+
+  putLog("Time synced.");
 }
 
 void setupEnv() {
@@ -165,14 +193,24 @@ void setupEnv() {
                   Adafruit_BMP280::FILTER_X16,      /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
   putLog("BMP280 initialized.");
+
+  putLog("Env initialized.");
 }
 
 // ホストIDは固定長だけれど何となく長めに取っておく。
 char hostId[32];
 void setupMackerel() {
   // TODO どっかにホストIDを永続化できるようになったら動的にホスト登録したいもんだ
+  // - 永続化されたホストIDを読む
+  // - ホストIDがなければ登録する
+  //  mackerelClient.registerHost("register-by-m5", hostId);
+  //  Serial.print("registerHost: ");
+  //  Serial.println(hostId);
+
   sprintf(hostId, "%s", mackerelHostId);
   mackerelClient.setHostId(hostId);
+
+  putLog("Mackerel initialized.");
 }
 
 void setup() {
@@ -180,19 +218,10 @@ void setup() {
   Wire.begin(32, 33);
 
   setupM5Ink();
-  putLog("M5Ink initialized.");
-
   setupWiFi();
-  putLog("Wi-Fi initialized.");
-
   setupTime();
-  putLog("Time synced.");
-
   setupEnv();
-  putLog("Env initialized.");
-
   setupMackerel();
-  putLog("Mackerel initialized.");
 }
 
 void loop() {
