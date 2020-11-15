@@ -8,7 +8,7 @@
 #include "env.h"
 
 // TODO EEPROM.length() が 0 で読み書きできないのが解決したらまた試す。
-#include <EEPROM.h>
+//#include <EEPROM.h>
 #include "MackerelClient.h"
 MackerelHostMetric hostMetricsPool[10];
 MackerelServiceMetric serviceMetricsPool[10];
@@ -87,6 +87,15 @@ void sendEnvToMackerel() {
   mackerelClient.addServiceMetric("sht30.t", sht3xResult.t);
   mackerelClient.addServiceMetric("sht30.rh", sht3xResult.rh);
   mackerelClient.postServiceMetrics("MyM5StackCoreInk");
+
+  mackerelClient.addHostMetric("custom.sht30.t", sht3xResult.t);
+  mackerelClient.addHostMetric("custom.sht30.rh", sht3xResult.rh);
+  // 自宅のRaspberry PiがBME280からの値を bme280.* で送っているのでそれに合わせている。
+  // が、温度と気圧のセンサが同じものなのかは知らない。
+  // https://github.com/7474/RealDiceBot/blob/master/IoTEdgeDevice/files/usr/local/bin/bme280/bme280.sh
+  mackerelClient.addHostMetric("custom.bme280.temperature", temperature);
+  mackerelClient.addHostMetric("custom.bme280.pressure", pressure / 100.0f);
+  mackerelClient.postHostMetrics();
 }
 
 void setupM5Ink() {
@@ -158,28 +167,12 @@ void setupEnv() {
   putLog("BMP280 initialized.");
 }
 
-// XXX
-#include <time.h>
-//char hostId[12];
+// ホストIDは固定長だけれど何となく長めに取っておく。
 char hostId[32];
 void setupMackerel() {
-  hostId[0] = 0x00;
-  int eepromLength = EEPROM.length();
-  int ioAddress = eepromLength - sizeof(hostId) - 1;
-  Serial.print("EEPROM length:");
-  Serial.println(eepromLength);
-  Serial.print("EEPROM ioAddress:");
-  Serial.println(ioAddress);
-
-  EEPROM.get(ioAddress, hostId);
-  Serial.print("EEPROM read:");
-  Serial.println(hostId);
-
-  sprintf(hostId, "%d", time(NULL));
-  EEPROM.put(ioAddress, hostId);
-  EEPROM.commit();
-  Serial.print("EEPROM write:");
-  Serial.println(hostId);
+  // TODO どっかにホストIDを永続化できるようになったら動的にホスト登録したいもんだ
+  sprintf(hostId, "%s", mackerelHostId);
+  mackerelClient.setHostId(hostId);
 }
 
 void setup() {
@@ -188,11 +181,6 @@ void setup() {
 
   setupM5Ink();
   putLog("M5Ink initialized.");
-
-  // https://github.com/m5stack/m5-docs/blob/master/docs/en/api/eeprom.md
-  int res = EEPROM.begin(128);
-  Serial.print("EEPROM begin:");
-  Serial.println(res);
 
   setupWiFi();
   putLog("Wi-Fi initialized.");
