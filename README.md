@@ -2,6 +2,10 @@
 
 koudenpa's M5Stack CoreInk.
 
+It reads the temperature and humidity from the environmental sensor and sends it to [Mackerel](https://mackerel.io/).
+
+Sending to Mackerel uses the [library](https://github.com/7474/ArduinoMackerelClient) I'm making now.
+
 ## Target
 
 - [M5Stack CoreInk 開発キット（1.5インチ Einkディスプレイ）](https://www.switch-science.com/catalog/6735/)
