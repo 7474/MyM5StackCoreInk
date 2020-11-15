@@ -7,6 +7,8 @@
 #include <WiFi.h>
 #include "env.h"
 
+// TODO EEPROM.length() が 0 で読み書きできないのが解決したらまた試す。
+#include <EEPROM.h>
 #include "MackerelClient.h"
 MackerelHostMetric hostMetricsPool[10];
 MackerelServiceMetric serviceMetricsPool[10];
@@ -87,6 +89,34 @@ void sendEnvToMackerel() {
   mackerelClient.postServiceMetrics("MyM5StackCoreInk");
 }
 
+void setupM5Ink() {
+  M5.begin();
+  if ( !M5.M5Ink.isInit())
+  {
+    Serial.printf("Ink Init faild");
+    while (1) delay(100);
+  }
+  M5.M5Ink.clear();
+  delay(1000);
+  //creat ink refresh Sprite
+  if ( InkPageSprite.creatSprite(0, 0, 200, 200, true) != 0 )
+  {
+    Serial.printf("Ink Sprite creat faild");
+  }
+}
+
+void setupWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  if (WiFi.begin(ssid, password) != WL_DISCONNECTED) {
+    ESP.restart();
+  }
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+  }
+}
+
 void setupTime() {
   // https://wak-tech.com/archives/833
   configTime(9 * 3600L, 0, "ntp.nict.jp", "time.google.com", "ntp.jst.mfeed.ad.jp");//NTPの設定
@@ -104,39 +134,7 @@ void setupTime() {
   M5.rtc.SetData(&RTCDate);
 }
 
-void setup() {
-  M5.begin();
-  if ( !M5.M5Ink.isInit())
-  {
-    Serial.printf("Ink Init faild");
-    while (1) delay(100);
-  }
-  M5.M5Ink.clear();
-  delay(1000);
-  //creat ink refresh Sprite
-  if ( InkPageSprite.creatSprite(0, 0, 200, 200, true) != 0 )
-  {
-    Serial.printf("Ink Sprite creat faild");
-  }
-  putLog("M5Ink initialized.");
-
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  if (WiFi.begin(ssid, password) != WL_DISCONNECTED) {
-    ESP.restart();
-  }
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-  }
-  putLog("Wi-Fi initialized.");
-
-  setupTime();
-  putLog("Time synced.");
-
-  // Grove for M5Stack CoreInk
-  Wire.begin(32, 33);
-
+void setupEnv() {
   // https://github.com/closedcube/ClosedCube_SHT31D_Arduino/blob/master/examples/periodicmode/periodicmode.ino
   sht3xd.begin(MY_SHT30_ADDRESS);
   Serial.print("Serial #");
@@ -158,6 +156,55 @@ void setup() {
                   Adafruit_BMP280::FILTER_X16,      /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
   putLog("BMP280 initialized.");
+}
+
+// XXX
+#include <time.h>
+//char hostId[12];
+char hostId[32];
+void setupMackerel() {
+  hostId[0] = 0x00;
+  int eepromLength = EEPROM.length();
+  int ioAddress = eepromLength - sizeof(hostId) - 1;
+  Serial.print("EEPROM length:");
+  Serial.println(eepromLength);
+  Serial.print("EEPROM ioAddress:");
+  Serial.println(ioAddress);
+
+  EEPROM.get(ioAddress, hostId);
+  Serial.print("EEPROM read:");
+  Serial.println(hostId);
+
+  sprintf(hostId, "%d", time(NULL));
+  EEPROM.put(ioAddress, hostId);
+  EEPROM.commit();
+  Serial.print("EEPROM write:");
+  Serial.println(hostId);
+}
+
+void setup() {
+  // Grove for M5Stack CoreInk
+  Wire.begin(32, 33);
+
+  setupM5Ink();
+  putLog("M5Ink initialized.");
+
+  // https://github.com/m5stack/m5-docs/blob/master/docs/en/api/eeprom.md
+  int res = EEPROM.begin(128);
+  Serial.print("EEPROM begin:");
+  Serial.println(res);
+
+  setupWiFi();
+  putLog("Wi-Fi initialized.");
+
+  setupTime();
+  putLog("Time synced.");
+
+  setupEnv();
+  putLog("Env initialized.");
+
+  setupMackerel();
+  putLog("Mackerel initialized.");
 }
 
 void loop() {
