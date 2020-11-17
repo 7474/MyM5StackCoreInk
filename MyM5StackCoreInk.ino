@@ -15,6 +15,9 @@ MackerelHostMetric hostMetricsPool[10];
 MackerelServiceMetric serviceMetricsPool[10];
 MackerelClient mackerelClient(hostMetricsPool, 10, serviceMetricsPool, 10, mackerelApiKey);
 
+#include "AkashiClient.h"
+AkashiClient akashiClient;
+
 #define VARSION = "MyM5StackCoreInk 0.0.3"
 #define MY_SHT30_ADDRESS 0x44
 #define MY_BMP280_ADDRESS 0x76
@@ -120,6 +123,14 @@ void sendEnvToMackerel() {
   mackerelClient.postHostMetrics();
 }
 
+void shukkin() {
+  akashiClient.stamp(AkashiStampTypeShukkin);
+}
+
+void taikin() {
+  akashiClient.stamp(AkashiStampTypeTaikin);
+}
+
 void setupM5Ink() {
   M5.begin();
   if ( !M5.M5Ink.isInit())
@@ -213,6 +224,14 @@ void setupMackerel() {
   putLog("Mackerel initialized.");
 }
 
+void setupAkashi() {
+  akashiClient.setCompanyCode(akashiCompanyCode);
+  // TODO トークンの更新。
+  akashiClient.setToken(akashiToken);
+
+  putLog("Akashi initialized.");
+}
+
 void setup() {
   // Grove for M5Stack CoreInk
   Wire.begin(32, 33);
@@ -222,6 +241,7 @@ void setup() {
   setupTime();
   setupEnv();
   setupMackerel();
+  setupAkashi();
 }
 
 void loop() {
