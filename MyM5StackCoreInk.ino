@@ -30,25 +30,23 @@ RTC_DateTypeDef RTCDate;
 char flushStrBuf[64];
 
 void putLog(char* message) {
-  //  InkPageSprite.drawString(10, 180, message);
-  //  InkPageSprite.pushSprite();
   Serial.println(message);
 }
 
 // https://github.com/m5stack/M5-CoreInk/blob/0a9a38ea03d57b6e4240b0b26eaa8184786caf6f/examples/FactoryTest/FactoryTest.ino#L52-L62
 float getBatVoltage()
 {
-    analogSetPinAttenuation(35,ADC_11db);
-    esp_adc_cal_characteristics_t *adc_chars = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 3600, adc_chars);
-    uint16_t ADCValue = analogRead(35);
-    
-    uint32_t BatVolmV  = esp_adc_cal_raw_to_voltage(ADCValue,adc_chars);
-    float BatVol = float(BatVolmV) * 25.1 / 5.1 / 1000;
-    return BatVol;
+  analogSetPinAttenuation(35, ADC_11db);
+  esp_adc_cal_characteristics_t *adc_chars = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 3600, adc_chars);
+  uint16_t ADCValue = analogRead(35);
+
+  uint32_t BatVolmV  = esp_adc_cal_raw_to_voltage(ADCValue, adc_chars);
+  float BatVol = float(BatVolmV) * 25.1 / 5.1 / 1000;
+  return BatVol;
 }
 
-void flushTime() {
+void drawTime(int x, int y) {
   M5.rtc.GetTime(&RTCtime);
   M5.rtc.GetData(&RTCDate);
 
@@ -56,8 +54,18 @@ void flushTime() {
           RTCDate.Year, RTCDate.Month, RTCDate.Date,
           RTCtime.Hours, RTCtime.Minutes, RTCtime.Seconds);
 
-  InkPageSprite.drawString(10, 10, flushStrBuf);
+  InkPageSprite.drawString(x, y, flushStrBuf);
   InkPageSprite.pushSprite();
+}
+
+void drawLog(char* message) {
+  drawTime(5, 170);
+  InkPageSprite.drawString(10, 185, message);
+  InkPageSprite.pushSprite();
+}
+
+void flushTime() {
+  drawTime(5, 10);
 }
 
 ClosedCube_SHT31D sht3xd;
@@ -121,6 +129,15 @@ void sendEnvToMackerel() {
   mackerelClient.addHostMetric("custom.bme280.temperature", temperature);
   mackerelClient.addHostMetric("custom.bme280.pressure", pressure / 100.0f);
   mackerelClient.postHostMetrics();
+}
+
+void updateMyM5StackCoreInk() {
+  putLog("update proc start.");
+  updateEnv();
+  flushEnv();
+  flushTime();
+  sendEnvToMackerel();
+  putLog("update proc end.");
 }
 
 void shukkin() {
@@ -242,14 +259,86 @@ void setup() {
   setupEnv();
   setupMackerel();
   setupAkashi();
+
+  drawLog("Initialized.");
+
+  updateMyM5StackCoreInk();
 }
 
+void beep() {
+  M5.Speaker.beep();
+  delay(100);
+  M5.Speaker.mute();
+}
+
+void beep2() {
+  M5.Speaker.beep();
+  delay(50);
+  M5.Speaker.mute();
+  delay(25);
+  M5.Speaker.beep();
+  delay(150);
+  M5.Speaker.mute();
+}
+
+void onBtnUp() {
+  beep();
+  int res = akashiClient.stamp(AkashiStampTypeShukkin);
+  Serial.print("AkashiStampTypeShukkin #");
+  Serial.println(res);
+  if (!res) {
+    drawLog("Shukkin Seiko.");
+  } else {
+    drawLog("Shukkin Shippai.");
+  }
+  beep2();
+}
+
+void onBtnDown() {
+  beep();
+  int res = akashiClient.stamp(AkashiStampTypeTaikin);
+  Serial.print("AkashiStampTypeTaikin #");
+  Serial.println(res);
+  if (!res) {
+    drawLog("Taikin Seiko.");
+  } else {
+    drawLog("Taikin Shippai.");
+  }
+  beep2();
+}
+
+char akashiTokenYoteichi[64];
+void onBtnMid() {
+  beep();
+  int res = akashiClient.updateToken(akashiTokenYoteichi);
+  Serial.print("updateToken #");
+  Serial.println(res);  
+  Serial.println(akashiTokenYoteichi);
+  if (!res) {
+    drawLog("updateToken Seiko.");
+  } else {
+    drawLog("updateToken Shippai.");
+  }
+  beep2();
+}
+
+unsigned long  lastUpdateMillis = 0;
 void loop() {
-  putLog("loop start.");
-  updateEnv();
-  flushEnv();
-  flushTime();
-  sendEnvToMackerel();
-  putLog("loop end.");
-  delay(60 * 1000);
+  // 60秒毎にもろもろ処理する。
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastUpdateMillis > 60 * 1000) {
+    lastUpdateMillis = currentMillis;
+    updateMyM5StackCoreInk();
+  }
+  // ボタンハンドリング。
+  M5.update();
+  if (M5.BtnUP.wasPressed()) {
+    onBtnUp();
+  }
+  if (M5.BtnDOWN.wasPressed()) {
+    onBtnDown();
+  }
+  if (M5.BtnMID.wasPressed()) {
+    onBtnMid();
+  }
 }
