@@ -8,8 +8,7 @@
 #include <WiFi.h>
 #include "env.h"
 
-// TODO EEPROM.length() が 0 で読み書きできないのが解決したらまた試す。
-//#include <EEPROM.h>
+#include <EEPROM.h>
 #include "MackerelClient.h"
 MackerelHostMetric hostMetricsPool[10];
 MackerelServiceMetric serviceMetricsPool[10];
@@ -18,6 +17,17 @@ MackerelClient mackerelClient(hostMetricsPool, 10, serviceMetricsPool, 10, macke
 #define VARSION = "MyM5StackCoreInk 0.0.3"
 #define MY_SHT30_ADDRESS 0x44
 #define MY_BMP280_ADDRESS 0x76
+
+// EEPROM
+const int eepromSize = 1000;
+// Mackerel
+const int hostIdVersionAddress = 0;
+const char currentHostIdVersion[4] = "001";
+char hostIdVersion[4];
+const int hostIdAddress = 4;
+// ホストIDは固定長だけれど何となく長めに取っておく。
+char hostId[32];
+// /EEPROM
 
 Ink_Sprite InkPageSprite(&M5.M5Ink);
 
@@ -139,6 +149,20 @@ void updateMyM5StackCoreInk() {
 
 void setupM5Ink() {
   M5.begin();
+  
+  // https://github.com/espressif/arduino-esp32/blob/master/libraries/EEPROM/examples/eeprom_write/eeprom_write.ino
+  Serial.println("start...");
+  if (!EEPROM.begin(eepromSize))
+  {
+    Serial.println("failed to initialise EEPROM"); delay(1000000);
+  }
+  Serial.println(" bytes read from Flash . Values are:");
+  for (int i = 0; i < eepromSize; i++)
+  {
+    Serial.print(byte(EEPROM.read(i))); Serial.print(" ");
+  }
+  Serial.println();
+  
   if (!M5.M5Ink.isInit())
   {
     Serial.printf("Ink Init faild");
@@ -214,17 +238,23 @@ void setupEnv() {
   putLog("Env initialized.");
 }
 
-// ホストIDは固定長だけれど何となく長めに取っておく。
-char hostId[32];
 void setupMackerel() {
-  // TODO どっかにホストIDを永続化できるようになったら動的にホスト登録したいもんだ
-  // - 永続化されたホストIDを読む
-  // - ホストIDがなければ登録する
-  //  mackerelClient.registerHost("register-by-m5", hostId);
-  //  Serial.print("registerHost: ");
-  //  Serial.println(hostId);
+  EEPROM.get(hostIdVersionAddress, hostIdVersion);
+  if (!strcmp(currentHostIdVersion, hostIdVersion)) {
+    // 永続化されたホストIDを読む
+    EEPROM.get(hostIdAddress, hostId);
+    Serial.print("loadedHost: ");
+    Serial.println(hostId);
+  } else {
+    // ホストIDがなければ登録する
+    mackerelClient.registerHost(mackerelHostName, hostId);
+    Serial.print("registerHost: ");
+    Serial.println(hostId);
+    EEPROM.put(hostIdVersionAddress, currentHostIdVersion);
+    EEPROM.put(hostIdAddress, hostId);
+    EEPROM.commit();
+  }
 
-  sprintf(hostId, "%s", mackerelHostId);
   mackerelClient.setHostId(hostId);
 
   putLog("Mackerel initialized.");
